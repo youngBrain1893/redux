@@ -1,0 +1,112 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "redux",
+  "steps": [
+    {
+      "file": "src/createStore.ts",
+      "description": "完整使用流程：\n- 创建 Store\n  ```javascript\n  // 完成 reducer 拆分\n  // reducer 也可以拆分成不同文件\n  const reducer = combineReducers({\n    logicSideA: (state, action) => {\n      switch(action.type) {\n        case 'type-a':\n          // logic\n        case 'type-b':\n        default:\n          return state; // 不处理则返回 state\n      }\n    },\n    logicSideB(state, action) {\n      // ...\n    }\n  });\n\n  // 1. 给 middleware 传递 store api\n  // 2. 绑定 next\n  // 3. 完成 dispatch 劫持\n  const enhancer = applyMiddleware(middleware1, middleware2);\n\n  // 利用闭包 保存 reducer，state，subscribes 等，返回对应获取处理方法 api\n  const store = createStore(reducer, preloadedState, enhancers);\n  ```\n- 组件使用\n  ```javascript\n  const ActionCreators = (action) => { { type: action }}\n  // 也可以是对象形式\n  \n  class Cpns extends React.Component {\n    constructor(props) {\n      super(props);\n\n      this.dispatch = bindActionCreators(ActionCreators, this.props.dispatch);\n    }\n\n    handleXXX() {\n      this.dispatch('xxx');\n      // 如果 ActionCreators 是对象（多一层命名空间的概念）\n      // this.dispatch.xxx('xxx');\n    }\n  }\n\n  const mapStateToProps = (state, props) => ({ x: state.x });\n  const mapDispatchToProps = (dispatch, props) => ({ dispatch, })\n  const CombinedCpn = connect(mapStateToProps, mapDispatchToProps)(Cpns);\n  export default CombinedCpn;\n  ```",
+      "line": 70
+    },
+    {
+      "file": "src/createStore.ts",
+      "description": "前面是方法签名直接跳过\n\n这里可以看出来 redux#createStore 支持 3 个参数\n- reducer 主函数，用于初始化 store，和接受 dispatch 的参数更新 store\n- preloadedState 预设的 state（可能来源于 ssr，可能来源于 ls 等），只是用来设置 currentState 并不会阻止初次的 dispatch(initCommit)\n  > 那么有什么用呢？马上就会变成 init 的状态，理论上没有 reducer 会去关心 Action.INIT 这个 type 的处理，基本都是走到默认返回当前 state（(⊙o⊙)…，好像就保持当前就是 currentState 的内容了）\n- enhancer 中间件作用的地方，对 createStore 进行包装（主要是包装 dispatch）\n",
+      "line": 83
+    },
+    {
+      "file": "src/compose.ts",
+      "description": "采用 reduce\n类似于栈传递 a->b->c->d\n\n实际执行 d->c->b->a\n\n注意实际使用地方的处理，applyMiddleware 逻辑\n```javascript\nreturn \n  (api) => // chain 初始化\n    (next) => // 绑定这里的 b，也就是 next\n      (action) => {} // 最终 dispatch 依旧是个 function 这里实际调用\n```",
+      "line": 56
+    },
+    {
+      "file": "src/combineReducers.ts",
+      "description": "combineReducer 用于拆分 reducer，分模块管理各个 reducer，类似于给配置加作用域前缀。\n\n```javascript\ncombineReducer({\n  a: reducer,\n  b: reducer\n})\n```\n\n返回结果\n```javascript\n{\n  a: xxx // 对于不关心的 action 直接返回 state 就可以了\n  b: xxx\n}\n```\n\n所以执行的时候就是 把每个 reducer 取 `state[key]` 执行，然后再设置回 `state[key]` 返回最终 state",
+      "line": 125
+    },
+    {
+      "file": "src/bindActionCreators.ts",
+      "description": "对 dispatch 的一次封装，通过 actionCreator 将外部调用的 action 处理为 reducer 需要的 action type",
+      "line": 13,
+      "selection": {
+        "start": {
+          "line": 63,
+          "character": 12
+        },
+        "end": {
+          "line": 63,
+          "character": 29
+        }
+      }
+    },
+    {
+      "file": "src/bindActionCreators.ts",
+      "description": "支持对象形式的 actionCreators 用于对不同种类的操作进行特定的 dispatch 参数处理\n一个在某个具体的组件内部使用，一定程度上减少模板代码\n\n```javascript\nthis.dispatch = bindActionCreatores(ActionCreators, this.props.dispatch);\n```",
+      "line": 76
+    },
+    {
+      "file": "src/applyMiddleware.ts",
+      "description": "1. applyMiddleware 返回的是一个 Enhancer\n```javascript\nconst store = createStore(reducer, [preloadState, [ applyMiddleware(...middlewares) ]])\n```\n",
+      "line": 60,
+      "selection": {
+        "start": {
+          "line": 62,
+          "character": 17
+        },
+        "end": {
+          "line": 62,
+          "character": 23
+        }
+      }
+    },
+    {
+      "file": "src/applyMiddleware.ts",
+      "description": "每个 middleware 接受原始 store 提供的 getState 和 dispatch api，进行初始化，返回用于 compose 处理 dispatch 逻辑的函数\n",
+      "line": 80
+    },
+    {
+      "file": "src/applyMiddleware.ts",
+      "description": "compose dispatch，且在最后接受原始的 store.disaptch\n\n```javascript\n// 看一个 middleware 的实例就知道如何作用的了  redux-thunk\nexport default (api) => next => (action) => {\n  // api 是 getState 和 dispatch\n  // next 是下一个 middleware 的逻辑，这里可能就是 store.dispatch\n  if (typeof action === 'function') {\n    action(api.dispatch, api.getState);\n  } else {\n    next(action);\n  }\n}\n```\n\n为什么是 `return (api) => (next) => (action) => {}` 的结构\n1. api 用于初始化在 chain 生成的时候需要调用一次\n2. next 用于 compose 用于绑定 next 关系\n3. action 最终 dispatch 触发时的逻辑",
+      "line": 81
+    },
+    {
+      "file": "src/createStore.ts",
+      "description": "这个可以注意一下，很多时候都只判断了 `typeof === 'object'` 没有判断当前值 是否为 `null`",
+      "line": 330,
+      "selection": {
+        "start": {
+          "line": 319,
+          "character": 28
+        },
+        "end": {
+          "line": 319,
+          "character": 37
+        }
+      }
+    },
+    {
+      "file": "src/createStore.ts",
+      "description": "store 通过闭包包含了以下内容：\n- currentReducer  reducer 逻辑方法   dispatch(action) 触发\n- currentState    当前 store 状态    getState() 获取\n- currentListeners   subscribe()    添加\n- nextListeners\n- isDispatching      内部使用变量，当前是否有 action dispatch 执行中",
+      "line": 110
+    },
+    {
+      "file": "src/createStore.ts",
+      "description": "subscribe 的时候会返回 unsubscribe 方法，用于从 nextListeners 中移除当前处理函数\n> 这里的 isSubscribed 也是闭包内存储的内容，每个 subscribe 独立，不存储其实也没问题， indexOf 拿不到值，这里可能是为了更高的性能吧",
+      "line": 192
+    },
+    {
+      "file": "src/createStore.ts",
+      "description": "事件派发的地方：\n- check action\n- call reducer\n- notify subscribers",
+      "line": 238
+    },
+    {
+      "file": "src/createStore.ts",
+      "description": "1. listener 触发发生的内容和 redux 无关，redux 只负责触发，不 care 执行逻辑\n  > 也许这里加个 try/catch 更好\n2. listener 触发不会传递 currentState，在处理函数内如果希望获取到最新的 state 需要手动调用 store.getState()；\n  这也是为什么需要在 dispatch 完成后再触发 listener 看 getState 实现，如果 isDispatching = true，直接 throw Error 而不是返回 state",
+      "line": 267
+    },
+    {
+      "file": "src/createStore.ts",
+      "description": "store 内容\n- dispatch      派发 action 触发 reducer 更新 state\n- subscribe     订阅 state 变更通知\n- getState      获取闭包内的 currentState\n- replaceReducer    提供一个 replaceReducer 的口子，一般用不上\n- $$observable  提供了一个 Rx 的口子，实际也是 subscribe，貌似并没有对外暴露（文档上是没有的）",
+      "line": 361
+    }
+  ],
+  "ref": "2f52c4fe4a85f3b0a5d41d66cfdd966c3bfa2629"
+}
